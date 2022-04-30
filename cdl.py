@@ -14,9 +14,10 @@ import ionsDictionary as Ion
 
 ##################### user defined parameters ###################################
 class properties:
-  electrolyteIons = [Ion.liIon, Ion.pf6Ion] #[Ion.potassiumIon, Ion.hydOHIon]
+  electrolyteIons = [Ion.hydLi5Ion, Ion.pf6Ion] #[Ion.potassiumIon, Ion.hydOHIon]
   solvent = Solvent.pcSolvent #pcSolvent
   bulkConcentration = 1  # in Molar i.e mol/l
+  maximumPackingFraction = sc.pi*np.sqrt(3)/8  # 1 for max, sc.pi/6 for scc, sc.pi*np.sqrt(3)/8 for bcc cell, sc.pi*2/np.sqrt(8)/3 for fcc
   potentialDifference = 0#1000  # in mV
   singleElectrode = False
   plot = True
@@ -35,7 +36,7 @@ def getDebyeLength(bulkConcentration,electrolyteIons,solvent):
 def ionStericConcentration(ionRadiusAng):
   ionRadius = ionRadiusAng*1e-10
   ionVolume = 4*np.pi*ionRadius**3/3
-  stericConcentration = 1/ionVolume/1000/sc.N_A
+  stericConcentration = prop.maximumPackingFraction/ionVolume/1000/sc.N_A
   return stericConcentration
 
 def getThresholdPotential(ion,bulkConcentration):
@@ -82,7 +83,7 @@ def getEffectiveDielectricConstant(solvent,potential):
   epsilon = sc.epsilon_0*prop.solvent.dielectric
   ionVolume = 4*np.pi*counter_ion.radiusAng**3/3 * 1e-30
   polarizability_factor = counter_ion.polarizability/3/epsilon/ionVolume
-  reducedDielectric = prop.solvent.dielectric * 1000*sc.N_A * ionStericConcentration(counter_ion.radiusAng)*ionVolume *  polarizability_factor
+  reducedDielectric = prop.solvent.dielectric * 1000*sc.N_A * ionStericConcentration(counter_ion.radiusAng)*ionVolume * polarizability_factor
   
   # ~ reducedDielectric = prop.solvent.dielectric *(3*sc.epsilon_0 + 2*counter_ion.polarizability* ionStericConcentration(counter_ion.radiusAng)*1000*sc.N_A)/(3*sc.epsilon_0 - counter_ion.polarizability* ionStericConcentration(counter_ion.radiusAng)*1000*sc.N_A)
   
@@ -107,11 +108,11 @@ def getStericLayerThickness(potential):
   rho_cap = counter_ion.charge*sc.e*sc.Avogadro*stericConcentration*1000
       
   if(abs(potential/1000) < abs(thresholdPotential)):
-    thickness_left = 0
+    thickness = 0
   else:
-    thickness_left = debyeLength*np.sqrt(2*nu)*(-1+0.5*nu+np.sqrt((1-0.5*nu)**2-counter_ion.charge*sc.e*potential/1000/sc.k/temperature+np.log(0.5*nu)))
+    thickness = debyeLength*np.sqrt(2*nu)*(-1+0.5*nu+np.sqrt((1-0.5*nu)**2-counter_ion.charge*sc.e*potential/1000/sc.k/temperature+np.log(0.5*nu)))
     
-  return thickness_left #(thickness_left,thickness_right)
+  return thickness #(thickness_left,thickness_right)
 
 def getChargeDensity(potential):
   debyeLength = getDebyeLength(prop.bulkConcentration,prop.electrolyteIons,prop.solvent)
@@ -129,9 +130,9 @@ def getChargeDensity(potential):
   rho_bulk = counter_ion.charge*sc.e*sc.Avogadro*prop.bulkConcentration*1000
   
   if(abs(potential/1000) < abs(thresholdPotential)):
-    chargeDensity = 0
-    # ~ print("Electrode potential is less than the threshold value of {} mV".format(1000*thresholdPotential))
-    
+    # if the potential is less than the threshold, charge density is given by Gouy-Chapman equation
+    chargeDensity = np.sqrt(8*sc.N_A*prop.bulkConcentration*epsilon*sc.k*temperature)*np.sinh(abs(counter_ion.charge*sc.e*potential/2000/sc.k/temperature))
+        
   else:
     chargeDensity = -2*rho_bulk*debyeLength*np.sqrt(2/nu)*np.sqrt((1-0.5*nu)**2-counter_ion.charge*sc.e*potential/1000/sc.k/temperature+np.log(0.5*nu))
     
@@ -622,9 +623,6 @@ def getIntegralCapacitance(index,V1,V2):
   return integral_capacitance #, integral_cap_charge
   
 
-
-
-
 voltageList = np.array(np.linspace(-1000,1000,4000))
     
 '''
@@ -662,8 +660,8 @@ print('charge density is ',getChargeDensity(potential)) '''
 cdl = []
 reduced_cdl = []
 bikcap = []
-print(getEffectiveDielectricConstant(prop.solvent,500))
-print(getEffectiveDielectricConstant(prop.solvent,-500))
+print('Effective dielectric constant of {} at potential {} is {}'.format(prop.solvent.name,500,getEffectiveDielectricConstant(prop.solvent,500)))
+print('Effective dielectric constant of {} at potential {} is {}'.format(prop.solvent.name,-500,getEffectiveDielectricConstant(prop.solvent,-500)))
 for v in voltageList:
   prop.singleElectrode = True
   potential = getChargeBalancePotential(v)
@@ -671,10 +669,12 @@ for v in voltageList:
   reduced_cdl.append(getReducedCDLcapacitance(potential)[0])
   bikcap.append(getBikermanCapacitance(potential)[0])
   
-plt.plot(voltageList,cdl)#,voltageList,reduced_cdl,voltageList,bikcap)
+plt.plot(voltageList/1000,bikcap)#,voltageList,reduced_cdl,voltageList,bikcap)
+plt.xlabel("potential difference (volts)")
+plt.ylabel(r'capacitance uF/cm$^{-2}$')
 plt.show()
 
-print('CDL',getIntegralCapacitance(1,0,1000))
+print('Integral capacitance from CDL model',getIntegralCapacitance(1,0,1000))
 # ~ print('Bik',getIntegralCapacitance(2,0,1000))
 # ~ print('Reduced CDL',getIntegralCapacitance(3,0,1000))
 #print('Energy',getTotalFreeEnergy(1000))
